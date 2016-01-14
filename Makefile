@@ -1,14 +1,18 @@
-TARGETS = $(patsubst %.c, %, $(wildcard *.c))
+TARGETS = libcoro.so demo
+CFLAGS = -Wall -std=gnu99
 
 all: $(TARGETS)
 
-%: %.c
-	$(CC) -Wall -std=gnu99 -o $@ $^
+libcoro.so: coro.c coro.h
+	$(CC) $(CFLAGS) -shared -fPIC -o $@ $^
+
+demo: main.c libcoro.so
+	$(CC) $(CFLAGS) -L./ -o $@ $^ -lcoro
 
 test: $(TARGETS)
-	./coro_context 
-	./coro_context calc
-	./coro_context calc "12 21*100-"
+	LD_LIBRARY_PATH=. ./demo 
+	LD_LIBRARY_PATH=. ./demo calc
+	LD_LIBRARY_PATH=. ./demo calc "12 21*100-"
 
 .PHONY: clean
 
