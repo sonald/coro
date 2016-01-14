@@ -10,7 +10,16 @@
 #define STACK_SIZE  (1<<20)
 #define DEFAULT_CAP 10
 
-#define coro_error(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
+#define coro_error(fmt, ...) do {           \
+    fprintf(stderr, fmt, ##__VA_ARGS__);    \
+    exit(-1);                               \
+} while (0)
+
+#ifndef NDEBUG
+#define coro_debug(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
+#else
+#define coro_debug(fmt, ...) do {} while(0)
+#endif
 
 struct scheduler {
     /* private usage */
@@ -26,10 +35,10 @@ static struct scheduler * current_sched = NULL;
 
 void coro_dump()
 {
-    fprintf(stderr, "co list:\n");
+    coro_debug("co list:\n");
     struct coro_ *co = current_sched->head;
     while (co) {
-        fprintf(stderr, "co(%p) func %p next %p\n", co, co->func, co->next);
+        coro_debug("co(%p) func %p next %p\n", co, co->func, co->next);
         co = co->next;
     }
 }
@@ -65,12 +74,12 @@ struct coro_* coro_create(coro_func_t fp, void* arg)
     co->state = CO_READY;
 
     if (getcontext(&co->env) < 0) {
-        fprintf(stderr, "%s\n", "getcontext failed");
+        coro_debug("%s\n", "getcontext failed");
         return NULL;
     }
 
     if (posix_memalign(&co->env.uc_stack.ss_sp, 8, STACK_SIZE) != 0) {
-        fprintf(stderr, "%s\n", "alloc error");
+        coro_debug("%s\n", "alloc error");
         return NULL;
     }
     co->env.uc_stack.ss_size = STACK_SIZE;

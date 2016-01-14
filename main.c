@@ -121,6 +121,7 @@ static void calc_test(const char* data)
 {
     coro_start();
     const char* stream = data ? data: "23 46+10*100-50-10*";
+    fprintf(stderr, "calc '%s'\n", stream);
     int result = 0;
     coro_create((coro_func_t)decode, (void*)stream);
     coro_create((coro_func_t)parse, (void*)&result);
