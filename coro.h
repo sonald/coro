@@ -21,21 +21,20 @@ struct coro_ {
     enum coro_state_t state;
 };
 
-struct scheduler {
-    ucontext_t env; /*scheduler context*/
-    struct coro_* current;
-};
-
+struct scheduler;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+void coro_start();
 
 struct coro_* coro_create(coro_func_t fp, void* arg);
 void coro_destroy(struct coro_* co);
 
 void coro_yield();
 void coro_schedule();
+void coro_finish();
 
 void coro_dump();
 

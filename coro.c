@@ -3,24 +3,31 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #include "coro.h"
 
 #define STACK_SIZE  (1<<20)
 #define DEFAULT_CAP 10
 
-static struct coro_ pool[DEFAULT_CAP];
-static int pool_ptr = 0;
-static struct coro_ *head = NULL;
+#define coro_error(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
 
-struct scheduler sched = { 
-    0
+struct scheduler {
+    /* private usage */
+    ucontext_t env; /*scheduler context*/
+    struct coro_* current;
+
+    struct coro_ pool[DEFAULT_CAP];
+    int pool_ptr;
+    struct coro_ *head;
 };
+
+static struct scheduler * current_sched = NULL;
 
 void coro_dump()
 {
     fprintf(stderr, "co list:\n");
-    struct coro_ *co = head;
+    struct coro_ *co = current_sched->head;
     while (co) {
         fprintf(stderr, "co(%p) func %p next %p\n", co, co->func, co->next);
         co = co->next;
@@ -29,7 +36,7 @@ void coro_dump()
 
 void coro_destroy(struct coro_* co)
 {
-    struct coro_** pp = &head;
+    struct coro_** pp = &current_sched->head;
     while (*pp) {
         if (*pp == co) {
             *pp = (*pp)->next;
@@ -51,7 +58,7 @@ static void coro_wrapper(uint32_t hi, uint32_t lo)
 
 struct coro_* coro_create(coro_func_t fp, void* arg)
 {
-    struct coro_* co = &pool[pool_ptr++];
+    struct coro_* co = &current_sched->pool[current_sched->pool_ptr++];
     memset(co, 0, sizeof *co);
     co->func = fp;
     co->arg = arg;
@@ -67,12 +74,12 @@ struct coro_* coro_create(coro_func_t fp, void* arg)
         return NULL;
     }
     co->env.uc_stack.ss_size = STACK_SIZE;
-    co->env.uc_link = &sched.env;
+    co->env.uc_link = &current_sched->env;
 
     uintptr_t ul = (uintptr_t)co;
     makecontext(&co->env, (void (*)())coro_wrapper, 2, (uint32_t)(ul>>32), ul);
 
-    struct coro_** pp = &head;
+    struct coro_** pp = &current_sched->head;
     while (*pp) {
         pp = &(*pp)->next;
     }
@@ -82,32 +89,52 @@ struct coro_* coro_create(coro_func_t fp, void* arg)
 
 void coro_yield()
 {
-    if (sched.current) {
-        swapcontext(&sched.current->env, &sched.env);
+    if (current_sched->current) {
+        swapcontext(&current_sched->current->env, &current_sched->env);
     }
 }
  
 void coro_schedule()
 {
-    if (!head) return;
+    if (!current_sched->head) return;
 
-    while (head) {
-        if (sched.current) {
-            struct coro_* next = sched.current->next;
-            if (!next) next = head;
+    while (current_sched->head) {
+        if (current_sched->current) {
+            struct coro_* next = current_sched->current->next;
+            if (!next) next = current_sched->head;
 
-            sched.current = next;
+            current_sched->current = next;
         } else {
-            sched.current = head;
+            current_sched->current = current_sched->head;
         }
 
-        sched.current->state = CO_RUNNING;
-        swapcontext(&sched.env, &sched.current->env);
+        current_sched->current->state = CO_RUNNING;
+        swapcontext(&current_sched->env, &current_sched->current->env);
 
-        if (sched.current->state == CO_DEAD) {
-            free(sched.current->env.uc_stack.ss_sp);
-            sched.current = NULL;
+        if (current_sched->current->state == CO_DEAD) {
+            free(current_sched->current->env.uc_stack.ss_sp);
+            current_sched->current = NULL;
         }
     }
+}
+
+void coro_start()
+{
+    if (current_sched) {
+        coro_error("there is a scheduler running\n");
+        return;
+    }
+
+    struct scheduler* sched = (struct scheduler*)malloc(sizeof(*current_sched));
+    memset(sched, 0, sizeof *sched);
+
+    current_sched = sched;
+}
+
+void coro_finish()
+{
+    assert(current_sched != NULL);
+    free(current_sched);
+    current_sched = NULL;
 }
 

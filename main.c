@@ -40,6 +40,7 @@ static void gen_third(int limit)
 
 static void symmetric_test()
 {
+    coro_start();
     coro_create((coro_func_t)gen_even, (void*)11);
     coro_create((coro_func_t)gen_odd, (void*)11);
     coro_create((coro_func_t)gen_third, (void*)11);
@@ -47,6 +48,7 @@ static void symmetric_test()
     coro_dump();
     coro_schedule();
     fprintf(stdout, "\n");
+    coro_finish();
 }
 
 /* RW co-operate */
@@ -117,21 +119,21 @@ static void parse(int* result)
 
 static void calc_test(const char* data)
 {
+    coro_start();
     const char* stream = data ? data: "23 46+10*100-50-10*";
     int result = 0;
     coro_create((coro_func_t)decode, (void*)stream);
     coro_create((coro_func_t)parse, (void*)&result);
     coro_schedule();
     printf("result = %d\n", result);
+    coro_finish();
 }
+
 
 int main(int argc, char *argv[])
 {
-    if (argc > 1 && strcmp(argv[1], "calc") == 0) {
-        calc_test(argc > 2 ? argv[2]: NULL);
-    } else {
-        symmetric_test();
-    }
+    symmetric_test();
+    calc_test(argc > 1 ? argv[1]: NULL);
     return 0;
 }
 
