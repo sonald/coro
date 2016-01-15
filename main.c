@@ -64,36 +64,44 @@ struct data {
 
 static void decode(const char* stream)
 {
-    const char* p = stream;
-    char num[10];
+    FILE* fp = fmemopen((char*)stream, strlen(stream), "r");
+    if (fp == 0) {
+        d.t = EOP;
+        return;
+    }
 
-    while (*p) {
-        while (isspace(*p)) p++;
-        if (isdigit(*p)) {
-            int i = 0;
-            do {
-            num[i++] = *p++;
-            } while (isdigit(*p));
-            num[i] = 0;
-
+    char op[2];
+    while (!feof(fp)) {
+        char num[10];
+        int ret = fscanf(fp, "%[0-9]", &num);
+        if (ret == 1) {
             d.t = NUM;
             d.v = atoi(num);
 
             printf("emit NUM %d\n", d.v);
             coro_yield();
+            continue;
 
-        } else if (strchr("+-*/", *p)) {
+        } else if (ret == EOF) {
+            break;
+        }
+
+        ret = fscanf(fp, "%1[*/+-]", &op);
+        if (ret == 1) {
             d.t = OP;
-            d.v = *p++;
+            d.v = op[0];
+
             printf("emit OP %c\n", d.v);
             coro_yield();
 
-        } else {
-            printf("emit EOP\n");
-            d.t = EOP;
+        } else if (ret == EOF) {
             break;
         }
+       
+        fscanf(fp, "%*[ \t\n\r]");
     }
+
+    fclose(fp);
 
     printf("emit EOP\n");
     d.t = EOP;
